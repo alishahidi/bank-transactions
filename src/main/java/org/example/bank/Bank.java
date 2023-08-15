@@ -5,6 +5,9 @@ import lombok.Setter;
 import org.example.utility.Helpers;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Getter
 @Setter
@@ -34,6 +37,43 @@ public class Bank {
                     return new Transaction(from, to, amount);
                 })
                 .toList();
+    }
+
+    public void executeTransactions() {
+        ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        for (Transaction transaction : transactions) {
+            executorService.submit(() -> processTransaction(transaction, accounts));
+        }
+        executorService.shutdown();
+        try {
+            executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException ignored) {
+        }
+    }
+
+    public void showNetBalance() {
+        for (Account account : accounts) {
+            long netChange = account.getBalance() - account.getFirstBalance();
+            System.out.println("Account " + account.getId() + " amount is: " + netChange);
+        }
+    }
+
+    private static void processTransaction(Transaction transaction, List<Account> accounts) {
+        Account fromAccount = findAccountById(accounts, transaction.from());
+        Account toAccount = findAccountById(accounts, transaction.to());
+        synchronized (fromAccount) {
+            fromAccount.setBalance(fromAccount.getBalance() - transaction.amount());
+        }
+        synchronized (toAccount) {
+            toAccount.setBalance(toAccount.getBalance() + transaction.amount());
+        }
+    }
+
+    private static Account findAccountById(List<Account> accounts, Integer accountId) {
+        return accounts.stream()
+                .filter(account -> account.getId().equals(accountId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Account not found for ID: " + accountId));
     }
 
 }
